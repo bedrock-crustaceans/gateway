@@ -1,0 +1,11 @@
+[package]
+name = "gateway"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bedrock = { git = "https://github.com/bedrock-crustaceans/bedrock-rs", features = ["full", "protocol-all"] }
+tracing = "0.1.44"
+egui = "0.34.1"
+eframe = "0.34.1"
+crossbeam = "0.8.4"
