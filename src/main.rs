@@ -1,10 +1,9 @@
 use bedrock::protocol::v898::packets::TextPacket;
 use bedrock::protocol::v924::enums::TextPacketType;
-use bedrock::protocol::V944;
+use bedrock::protocol::{DynPacket, Packets, V944};
 use eframe::{run_native, App, NativeOptions, Result};
 use egui::*;
 use egui_material_icons::icons::{ICON_PLAY_ARROW, ICON_STOP};
-use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::net::SocketAddr;
@@ -25,10 +24,6 @@ struct GatewayApp {
     state: AppState
 }
 
-trait PacketData: Any + Debug + Send {}
-
-impl<T: Any + Debug + Send> PacketData for T {}
-
 #[derive(Debug)]
 enum PacketSource {
     Server,
@@ -39,7 +34,7 @@ enum PacketSource {
 struct PacketEntry {
     timestamp: Instant,
     source: PacketSource,
-    packet: Box<dyn PacketData>
+    packet: Box<dyn DynPacket>
 }
 
 fn fake_packets() -> BTreeMap<String, Vec<PacketEntry>> {
@@ -47,8 +42,8 @@ fn fake_packets() -> BTreeMap<String, Vec<PacketEntry>> {
 
     let mut map: BTreeMap<String, Vec<PacketEntry>> = BTreeMap::new();
 
-    fn insert<T: PacketData> (map: &mut BTreeMap<String, Vec<PacketEntry>>, packet: Box<T>, source: PacketSource) {
-        let full = std::any::type_name::<T>();
+    fn insert(map: &mut BTreeMap<String, Vec<PacketEntry>>, packet: Box<dyn DynPacket>, source: PacketSource) {
+        let full = packet.name();
         
         let no_generics = full.split('<').next().unwrap_or(full);
         let name = no_generics.rsplit("::").next().unwrap_or(no_generics);
@@ -64,7 +59,7 @@ fn fake_packets() -> BTreeMap<String, Vec<PacketEntry>> {
 
     insert(
         &mut map,
-        Box::new(TextPacket::<V944> {
+        V944::TextPacket(Box::new(TextPacket::<V944> {
             localize: false,
             message_type: TextPacketType::Chat { 
                 player_name: "".to_string(), 
@@ -73,7 +68,7 @@ fn fake_packets() -> BTreeMap<String, Vec<PacketEntry>> {
             sender_xuid: "".to_string(),
             platform_id: "".to_string(),
             filtered_message: None,
-        }),
+        })).into_inner(),
         Client,
     );
 
