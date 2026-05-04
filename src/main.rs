@@ -1,15 +1,22 @@
+pub mod network;
+
+use bedrock::network::connection::Connection;
 use bedrock::protocol::v898::packets::TextPacket;
 use bedrock::protocol::v924::enums::TextPacketType;
 use bedrock::protocol::{DynPacket, Packets, V944};
+use chrono::{DateTime, Local};
 use eframe::{run_native, App, NativeOptions, Result};
 use egui::*;
 use egui_material_icons::icons::{ICON_PLAY_ARROW, ICON_STOP};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::net::SocketAddr;
-use std::time::Instant;
 
-fn main() -> Result<()> {
+pub type BedrockProtocol = V944;
+pub type BedrockConnection = Connection<BedrockProtocol>;
+
+#[tokio::main]
+async fn main() -> Result<()> {
     run_native(
         "Gateway",
         NativeOptions::default(),
@@ -32,7 +39,7 @@ enum PacketSource {
 
 #[derive(Debug)]
 struct PacketEntry {
-    timestamp: Instant,
+    timestamp: DateTime<Local>,
     source: PacketSource,
     packet: Box<dyn DynPacket>
 }
@@ -51,7 +58,7 @@ fn fake_packets() -> BTreeMap<String, Vec<PacketEntry>> {
         map.entry(name.into())
             .or_default()
             .push(PacketEntry {
-                timestamp: Instant::now(),
+                timestamp: Local::now(),
                 source,
                 packet,
             });
@@ -196,8 +203,8 @@ impl App for GatewayApp {
                                 .show(ui, |ui| {
                                     for packet in list {
                                         ui.horizontal(|ui| {
-                                            let ts = packet.timestamp.elapsed().as_secs_f32();
-                                            ui.label(format!("[{:.2}s ago]", ts));
+                                            let ts = packet.timestamp.format("%H:%M:%S%.3f").to_string();
+                                            ui.label(format!("[{}]", ts));
 
                                             match packet.source {
                                                 PacketSource::Server => {
