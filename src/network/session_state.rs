@@ -6,25 +6,25 @@ use crate::BedrockProtocol;
 use crate::network::direction::Direction;
 use crate::network::session::Session;
 
-pub enum PacketHandler {
-    Login(Direction),
+pub enum SessionState {
+    Login,
     Play
 }
 
-impl PacketHandler {
-    pub fn handle(&self, session: &mut Session, packet: BedrockProtocol) {
-        match self {
-            PacketHandler::Login(direction) => self.handle_login(session, packet, direction),
-            PacketHandler::Play => self.handle_play(packet),
+impl Session {
+    pub fn handle(&mut self, packet: &BedrockProtocol) {
+        match self.state {
+            SessionState::Login => self.handle_login(packet),
+            SessionState::Play => self.handle_play(packet),
         }
     }
     
-    pub fn handle_login(&self, session: &mut Session, packet: BedrockProtocol, direction: &Direction) {
-        match (direction, packet) {
+    pub fn handle_login(&mut self, packet: &BedrockProtocol) {
+        match (self.direction, packet) {
             (Direction::Upstream, BedrockProtocol::RequestNetworkSettingsPacket(packet)) => {
                 let protocol = packet.client_network_version as u32;
                 if protocol != BedrockProtocol::PROTOCOL_VERSION {
-                    session.send_immediate(
+                    self.send_immediate(
                         BedrockProtocol::PlayStatusPacket(PlayStatusPacket {
                             status: if protocol < BedrockProtocol::PROTOCOL_VERSION {
                                 PlayStatus::LoginFailedClientOld
@@ -35,8 +35,8 @@ impl PacketHandler {
                     );
                     return;
                 }
-                
-                session.send_immediate(BedrockProtocol::NetworkSettingsPacket(NetworkSettingsPacket {
+
+                self.send_immediate(BedrockProtocol::NetworkSettingsPacket(NetworkSettingsPacket {
                     compression_threshold: 1,
                     compression_algorithm: PacketCompressionAlgorithm::None,
                     client_throttle_enabled: false,
@@ -44,7 +44,7 @@ impl PacketHandler {
                     client_throttle_scalar: 0.0,
                 }.into()));
 
-                session.set_compression(Some(Compression::None));
+                self.set_compression(Some(Compression::None));
             },
             (Direction::Upstream, BedrockProtocol::LoginPacket(packet)) => {
                 
@@ -53,7 +53,7 @@ impl PacketHandler {
         }
     }
     
-    pub fn handle_play(&self, packet: BedrockProtocol) {
+    pub fn handle_play(&self, packet: &BedrockProtocol) {
         
     }
 }

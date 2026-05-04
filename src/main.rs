@@ -1,17 +1,16 @@
 pub mod network;
 
+use crate::network::event::NetworkEvent;
+use crate::network::Network;
 use bedrock::network::connection::Connection;
-use bedrock::protocol::v898::packets::TextPacket;
-use bedrock::protocol::v924::enums::TextPacketType;
 use bedrock::protocol::{DynPacket, Packets, V944};
 use chrono::{DateTime, Local};
 use eframe::{run_native, App, NativeOptions, Result};
-use egui::*;
+use egui::{Button, CentralPanel, CollapsingHeader, Color32, Panel, RichText, TextEdit, Ui};
 use egui_material_icons::icons::{ICON_PLAY_ARROW, ICON_STOP};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::net::SocketAddr;
-use bedrock::auth::auth_oidc::AuthOIDC;
+use crate::network::direction::Direction;
 
 pub type BedrockProtocol = V944;
 pub type BedrockConnection = Connection<BedrockProtocol>;
@@ -30,8 +29,6 @@ async fn main() -> Result<()> {
 
 struct GatewayApp {
     state: AppState,
-    
-    oidc: Option<AuthOIDC>
 }
 
 #[derive(Debug)]
@@ -43,49 +40,10 @@ enum PacketSource {
 #[derive(Debug)]
 struct PacketEntry {
     timestamp: DateTime<Local>,
-    source: PacketSource,
+    direction: Direction,
     packet: Box<dyn DynPacket>
 }
 
-fn fake_packets() -> BTreeMap<String, Vec<PacketEntry>> {
-    use PacketSource::*;
-
-    let mut map: BTreeMap<String, Vec<PacketEntry>> = BTreeMap::new();
-
-    fn insert(map: &mut BTreeMap<String, Vec<PacketEntry>>, packet: Box<dyn DynPacket>, source: PacketSource) {
-        let full = packet.name();
-        
-        let no_generics = full.split('<').next().unwrap_or(full);
-        let name = no_generics.rsplit("::").next().unwrap_or(no_generics);
-
-        map.entry(name.into())
-            .or_default()
-            .push(PacketEntry {
-                timestamp: Local::now(),
-                source,
-                packet,
-            });
-    }
-
-    insert(
-        &mut map,
-        V944::TextPacket(Box::new(TextPacket::<V944> {
-            localize: false,
-            message_type: TextPacketType::Chat { 
-                player_name: "".to_string(), 
-                message: "".to_string() 
-            },
-            sender_xuid: "".to_string(),
-            platform_id: "".to_string(),
-            filtered_message: None,
-        })).into_inner(),
-        Client,
-    );
-
-    map
-}
-
-#[derive(Debug)]
 enum AppState {
     Setup {
         client_addr: String,
@@ -94,8 +52,7 @@ enum AppState {
         server_addr_valid: bool,
     },
     Running {
-        client_addr: SocketAddr,
-        server_addr: SocketAddr,
+        network: Network,
         packets: BTreeMap<String, Vec<PacketEntry>>
     },
 }
@@ -108,8 +65,7 @@ impl Default for GatewayApp {
                 client_addr_valid: true,
                 server_addr: "127.0.0.1:19133".into(),
                 server_addr_valid: true,
-            },
-            oidc: AuthOIDC::fetch().ok()
+            }
         }
     }
 }
@@ -117,6 +73,36 @@ impl Default for GatewayApp {
 impl App for GatewayApp {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         let mut next_state = None;
+        
+        match &mut self.state {
+            AppState::Running { network, packets } => {
+                while let Ok(ev) = network.ev_rx.try_recv() {
+                    match ev {
+                        NetworkEvent::Packet {
+                            packet,
+                            direction,
+                            ..
+                        } => {
+                            let packet = packet.into_inner();
+                            let full = packet.name();
+
+                            let no_generics = full.split('<').next().unwrap_or(full);
+                            let name = no_generics.rsplit("::").next().unwrap_or(no_generics);
+
+                            packets.entry(name.into())
+                                .or_default()
+                                .push(PacketEntry {
+                                    timestamp: Local::now(),
+                                    direction,
+                                    packet,
+                                });
+                        },
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
     
         Panel::top("top_bar").show_inside(ui, |ui| {
             ui.horizontal(|ui| {
@@ -147,9 +133,8 @@ impl App for GatewayApp {
                             match (client_addr.parse(), server_addr.parse()) {
                                 (Ok(c), Ok(s)) => {
                                     next_state = Some(AppState::Running {
-                                        client_addr: c,
-                                        server_addr: s,
-                                        packets: fake_packets()
+                                        network: Network::new(c, s),
+                                        packets: BTreeMap::new()
                                     });
                                 }
                                 (c, s) => {
@@ -160,10 +145,10 @@ impl App for GatewayApp {
                         }
                     }
     
-                    AppState::Running { client_addr, server_addr, .. } => {
+                    AppState::Running { network, .. } => {
                         ui.label("Client:");
                         
-                        let mut c = client_addr.to_string();
+                        let mut c = network.rx_addr.to_string();
                         ui.add_enabled(
                             false,
                             TextEdit::singleline(&mut c)
@@ -171,7 +156,7 @@ impl App for GatewayApp {
 
                         ui.label("Server:");
                         
-                        let mut s = server_addr.to_string();
+                        let mut s = network.tx_addr.to_string();
                         ui.add_enabled(
                             false,
                             TextEdit::singleline(&mut s)
@@ -183,10 +168,12 @@ impl App for GatewayApp {
                         );
     
                         if ui.add(button).clicked() {
+                            network.close();
+                            
                             next_state = Some(AppState::Setup {
-                                client_addr: client_addr.to_string(),
+                                client_addr: network.rx_addr.to_string(),
                                 client_addr_valid: true,
-                                server_addr: server_addr.to_string(),
+                                server_addr: network.tx_addr.to_string(),
                                 server_addr_valid: true,
                             });
                         }
@@ -210,12 +197,12 @@ impl App for GatewayApp {
                                             let ts = packet.timestamp.format("%H:%M:%S%.3f").to_string();
                                             ui.label(format!("[{}]", ts));
 
-                                            match packet.source {
-                                                PacketSource::Server => {
-                                                    ui.colored_label(Color32::LIGHT_BLUE, "SERVER");
+                                            match packet.direction {
+                                                Direction::Downstream => {
+                                                    ui.colored_label(Color32::LIGHT_BLUE, "DOWN");
                                                 }
-                                                PacketSource::Client => {
-                                                    ui.colored_label(Color32::LIGHT_GREEN, "CLIENT");
+                                                Direction::Upstream => {
+                                                    ui.colored_label(Color32::LIGHT_GREEN, "UP");
                                                 }
                                             }
 

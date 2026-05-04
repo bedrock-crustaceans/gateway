@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bedrock = { git = "https://github.com/bedrock-crustaceans/bedrock-rs", features = ["full", "protocol-all", "protocol-dyn-name"] }
+bedrock = { git = "https://github.com/bedrock-crustaceans/bedrock-rs", features = ["full", "protocol-all", "protocol-dyn-name", "auth-async"] }
 tracing = "0.1.44"
 egui = "0.34.1"
 egui_material_icons = "0.6.0"
