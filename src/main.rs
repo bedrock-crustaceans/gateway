@@ -11,6 +11,7 @@ use egui_material_icons::icons::{ICON_PLAY_ARROW, ICON_STOP};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::net::SocketAddr;
+use bedrock::auth::auth_oidc::AuthOIDC;
 
 pub type BedrockProtocol = V944;
 pub type BedrockConnection = Connection<BedrockProtocol>;
@@ -28,7 +29,9 @@ async fn main() -> Result<()> {
 }
 
 struct GatewayApp {
-    state: AppState
+    state: AppState,
+    
+    oidc: Option<AuthOIDC>
 }
 
 #[derive(Debug)]
@@ -105,7 +108,8 @@ impl Default for GatewayApp {
                 client_addr_valid: true,
                 server_addr: "127.0.0.1:19133".into(),
                 server_addr_valid: true,
-            }
+            },
+            oidc: AuthOIDC::fetch().ok()
         }
     }
 }
