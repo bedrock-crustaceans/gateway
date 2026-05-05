@@ -1,4 +1,4 @@
-use crate::network::direction::Direction;
+use crate::network::source::Source;
 use crate::BedrockProtocol;
 use std::net::SocketAddr;
 
@@ -7,7 +7,7 @@ pub enum NetworkEvent {
     Stopped,
     Packet {
         packet: BedrockProtocol,
+        source: Source,
         addr: SocketAddr,
-        direction: Direction,
     }
 }

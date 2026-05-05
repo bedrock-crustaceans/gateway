@@ -3,7 +3,7 @@ use bedrock::protocol::ProtoVersion;
 use bedrock::protocol::v662::enums::{PacketCompressionAlgorithm, PlayStatus};
 use bedrock::protocol::v662::packets::{NetworkSettingsPacket, PlayStatusPacket};
 use crate::BedrockProtocol;
-use crate::network::direction::Direction;
+use crate::network::source::Source;
 use crate::network::session::Session;
 
 pub enum SessionState {
@@ -20,8 +20,8 @@ impl Session {
     }
     
     pub fn handle_login(&mut self, packet: &BedrockProtocol) {
-        match (self.direction, packet) {
-            (Direction::Upstream, BedrockProtocol::RequestNetworkSettingsPacket(packet)) => {
+        match (self.source, packet) {
+            (Source::Client, BedrockProtocol::RequestNetworkSettingsPacket(packet)) => {
                 let protocol = packet.client_network_version as u32;
                 if protocol != BedrockProtocol::PROTOCOL_VERSION {
                     self.send_immediate(
@@ -46,7 +46,7 @@ impl Session {
 
                 self.set_compression(Some(Compression::None));
             },
-            (Direction::Upstream, BedrockProtocol::LoginPacket(packet)) => {
+            (Source::Client, BedrockProtocol::LoginPacket(packet)) => {
                 
             }
             _ => {}

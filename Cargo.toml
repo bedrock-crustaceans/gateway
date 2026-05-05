@@ -7,9 +7,8 @@ edition = "2024"
 bedrock = { git = "https://github.com/bedrock-crustaceans/bedrock-rs", features = ["full", "protocol-all", "protocol-dyn-name", "auth-async"] }
 tracing = "0.1.44"
 egui = "0.34.1"
-egui_material_icons = "0.6.0"
+egui-phosphor = { version = "0.12.0", features = ["fill"] }
 eframe = "0.34.1"
-crossbeam = "0.8.4"
 tokio = "1.52.1"
 chrono = "0.4.44"
 serde = "1.0.228"

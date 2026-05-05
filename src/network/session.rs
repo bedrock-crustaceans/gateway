@@ -1,4 +1,4 @@
-use crate::network::direction::Direction;
+use crate::network::source::Source;
 use crate::network::session_state::SessionState;
 use crate::{BedrockConnection, BedrockProtocol};
 use bedrock::network::compression::Compression;
@@ -16,7 +16,7 @@ pub enum ConnectionEvent {
 pub struct Session {
     pub addr: SocketAddr,
     pub state: SessionState,
-    pub direction: Direction,
+    pub source: Source,
     
     out_q: Vec<BedrockProtocol>,
     inc_rx: UnboundedReceiver<BedrockProtocol>,
@@ -24,7 +24,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(conn: BedrockConnection, direction: Direction) -> Self {
+    pub fn new(conn: BedrockConnection, direction: Source) -> Self {
         let (inc_tx, inc_rx) = tokio::sync::mpsc::unbounded_channel::<BedrockProtocol>();
         let (conn_tx, mut conn_rx) = tokio::sync::mpsc::unbounded_channel::<ConnectionEvent>();
         
@@ -75,7 +75,7 @@ impl Session {
         Session {
             addr,
             state: SessionState::Login,
-            direction,
+            source: direction,
             
             out_q: Vec::new(),
             inc_rx,

@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::interval;
-use crate::network::direction::Direction;
+use crate::network::source::Source;
 use crate::network::session::Session;
 
 pub mod event;
@@ -15,7 +15,7 @@ pub mod command;
 pub mod listener;
 pub mod session;
 pub mod session_state;
-pub mod direction;
+pub mod source;
 pub mod login_request;
 
 pub struct Network {
@@ -61,7 +61,7 @@ impl Network {
                         }
                     },
                     Ok(conn) = listener.accept::<BedrockProtocol>() => {
-                        let session = Session::new(conn, Direction::Upstream);
+                        let session = Session::new(conn, Source::Client);
                         sessions.push(session);
                     }
                     _ = tick.tick() => {
@@ -74,7 +74,7 @@ impl Network {
                                 ev_tx.send(NetworkEvent::Packet {
                                     packet,
                                     addr: session.addr,
-                                    direction: session.direction
+                                    source: session.source
                                 }).unwrap();
                             }
                         }
