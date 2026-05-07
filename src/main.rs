@@ -5,14 +5,14 @@ use crate::network::event::NetworkEvent;
 use crate::network::source::Source;
 use crate::network::Network;
 use bedrock::network::connection::Connection;
-use bedrock::protocol::{DynPacket, Packets, V944};
+use bedrock::protocol::{DynPacket, Packets, V975};
 use chrono::{DateTime, Local};
 use eframe::{run_native, App, NativeOptions, Result};
 use egui::{CentralPanel, CollapsingHeader, Color32, Ui};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
-pub type BedrockProtocol = V944;
+pub type BedrockProtocol = V975;
 pub type BedrockConnection = Connection<BedrockProtocol>;
 
 #[tokio::main]
