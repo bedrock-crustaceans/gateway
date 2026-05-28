@@ -5,7 +5,7 @@ use crate::network::event::NetworkEvent;
 use crate::network::source::Source;
 use crate::network::Network;
 use bedrock::network::connection::Connection;
-use bedrock::protocol::{DynPacket, Packets, V975};
+use bedrock::protocol::{PacketDyn, Packets, V975};
 use chrono::{DateTime, Local};
 use eframe::{run_native, App, NativeOptions, Result};
 use egui::{CentralPanel, CollapsingHeader, Color32, Ui};
@@ -47,7 +47,7 @@ enum PacketSource {
 struct PacketEntry {
     timestamp: DateTime<Local>,
     source: Source,
-    packet: Box<dyn DynPacket>
+    packet: Box<dyn PacketDyn>
 }
 
 enum AppState {
@@ -89,11 +89,8 @@ impl App for GatewayApp {
                             source,
                             ..
                         } => {
-                            let packet = packet.into_inner();
-                            let full = packet.name();
-
-                            let no_generics = full.split('<').next().unwrap_or(full);
-                            let name = no_generics.rsplit("::").next().unwrap_or(no_generics);
+                            let packet: Box<dyn PacketDyn> = packet.into();
+                            let name = packet.meta().name;
 
                             packets.entry(name.into())
                                 .or_default()

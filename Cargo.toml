@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bedrock = { git = "https://github.com/bedrock-crustaceans/bedrock-rs", features = ["full", "protocol-v975", "protocol-dyn-name", "auth-async"] }
+bedrock = { git = "https://github.com/bedrock-crustaceans/bedrock-rs", features = ["full", "protocol-v975", "protocol-packet-dyn", "protocol-packet-meta", "auth-async"] }
 tracing = "0.1.44"
 egui = "0.34.1"
 egui-phosphor = { version = "0.12.0", features = ["fill"] }
