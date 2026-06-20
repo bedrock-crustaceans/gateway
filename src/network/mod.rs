@@ -17,7 +17,6 @@ use tokio::time::interval;
 
 pub mod event;
 pub mod command;
-pub mod listener;
 pub mod session;
 pub mod session_state;
 pub mod source;
@@ -106,6 +105,7 @@ impl Network {
                 }
             }
             
+            client.stop();
             server.stop();
         });
         
