@@ -24,7 +24,8 @@ pub fn toolbar(ui: &mut Ui, state: &mut AppState) {
                             (Ok(c), Ok(s)) => {
                                 *state = AppState::Running {
                                     network: Network::new(c, s),
-                                    packets: BTreeMap::new()
+                                    packets: BTreeMap::new(),
+                                    pong_msg: "".to_string()
                                 };
                                 return;
                             }

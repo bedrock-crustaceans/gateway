@@ -28,7 +28,7 @@ impl Session {
         let (inc_tx, inc_rx) = tokio::sync::mpsc::unbounded_channel::<BedrockProtocol>();
         let (conn_tx, mut conn_rx) = tokio::sync::mpsc::unbounded_channel::<ConnectionEvent>();
         
-        let addr = *conn.get_socket_addr();
+        let addr = conn.get_socket_addr();
         
         let mut conn = conn;
         tokio::spawn(async move {

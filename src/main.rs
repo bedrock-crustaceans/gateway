@@ -5,14 +5,14 @@ use crate::network::event::NetworkEvent;
 use crate::network::source::Source;
 use crate::network::Network;
 use bedrock::network::connection::Connection;
-use bedrock::protocol::{PacketDyn, Packets, V975};
+use bedrock::protocol::{PacketDyn, Packets, V1001};
 use chrono::{DateTime, Local};
 use eframe::{run_native, App, NativeOptions, Result};
 use egui::{CentralPanel, CollapsingHeader, Color32, Ui};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
-pub type BedrockProtocol = V975;
+pub type BedrockProtocol = V1001;
 pub type BedrockConnection = Connection<BedrockProtocol>;
 
 #[tokio::main]
@@ -59,7 +59,8 @@ enum AppState {
     },
     Running {
         network: Network,
-        packets: BTreeMap<String, Vec<PacketEntry>>
+        packets: BTreeMap<String, Vec<PacketEntry>>,
+        pong_msg: String,
     },
 }
 
@@ -81,7 +82,7 @@ impl App for GatewayApp {
         let mut next_state = None;
         
         match &mut self.state {
-            AppState::Running { network, packets } => {
+            AppState::Running { network, packets, pong_msg } => {
                 while let Ok(ev) = network.ev_rx.try_recv() {
                     match ev {
                         NetworkEvent::Packet {
@@ -100,6 +101,10 @@ impl App for GatewayApp {
                                     packet,
                                 });
                         }
+                        NetworkEvent::Pong(msg) => {
+                            let str = String::from_utf8_lossy(&msg);
+                            *pong_msg = str.to_string();
+                        }
                         _ => {}
                     }
                 }
@@ -111,7 +116,9 @@ impl App for GatewayApp {
     
         CentralPanel::default().show_inside(ui, |ui| {
             match &self.state {
-                AppState::Running { packets, .. } => {
+                AppState::Running { packets, pong_msg, .. } => {
+                    ui.label(pong_msg);
+                    
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         for (packet_name, list) in packets.iter().rev() {
                             let header = format!("{} ({})", packet_name, list.len());

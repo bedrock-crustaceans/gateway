@@ -9,5 +9,6 @@ pub enum NetworkEvent {
         packet: BedrockProtocol,
         source: Source,
         addr: SocketAddr,
-    }
+    },
+    Pong(Box<[u8]>)
 }

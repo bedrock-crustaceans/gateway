@@ -1,14 +1,19 @@
 use crate::network::command::NetworkCommand;
 use crate::network::event::NetworkEvent;
+use crate::network::session::Session;
+use crate::network::source::Source;
 use crate::BedrockProtocol;
-use bedrock::network::listener::Listener;
+use bedrock::network::connection::Connection;
+use bedrock::network::info::MINECRAFT_EDITION_MOTD;
+use bedrock::network::motd::BedrockMOTD;
+use bedrock::network::transport::TransportLayerConnection;
 use bedrock::protocol::ProtoVersion;
+use raknet_tokio::prelude::{RakClient, RakServer};
+use rand::random;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::interval;
-use crate::network::source::Source;
-use crate::network::session::Session;
 
 pub mod event;
 pub mod command;
@@ -35,19 +40,32 @@ impl Network {
         let (ev_tx, ev_rx) = unbounded_channel();
         
         tokio::spawn(async move {
-            let mut listener = Listener::new_raknet(
-                rx_addr,
-                "Gateway".to_string(),
-                "https://bedrock-crustaceans.org/gateway".to_string(),
-                BedrockProtocol::GAME_VERSION.to_string(),
-                BedrockProtocol::PROTOCOL_VERSION,
-                BedrockProtocol::RAKNET_VERSION,
-                0,
-                0,
-                false,
-            ).await.unwrap();
+            let guid: u64 = random::<u64>();
 
-            listener.start().await.unwrap();
+            let mut server = RakServer::new(rx_addr, |conf| {
+                conf.guid = guid;
+                conf.protocols = Box::new([BedrockProtocol::RAKNET_VERSION]);
+                conf.message = BedrockMOTD {
+                    edition: MINECRAFT_EDITION_MOTD.to_owned(),
+                    version: BedrockProtocol::GAME_VERSION.to_string(),
+                    name: "Gateway".to_string(),
+                    sub_name: "https://bedrock-crustaceans.org/gateway".to_string(),
+                    player_max: 0,
+                    player_count: 0,
+                    protocol: BedrockProtocol::PROTOCOL_VERSION,
+                    guid,
+                    game_mode: "Survival".to_string(),
+                    port_v4: Some(rx_addr.port()),
+                    port_v6: Some(rx_addr.port()),
+                    nintendo_limited: Some(false),
+                }.into()
+            });
+
+            server.start().await.unwrap();
+            
+            let mut client = RakClient::new(|_| {});
+            
+            client.start().await.unwrap();
             
             let mut tick = interval(Duration::from_millis(20));
             
@@ -60,9 +78,14 @@ impl Network {
                             NetworkCommand::Stop => break
                         }
                     },
-                    Ok(conn) = listener.accept::<BedrockProtocol>() => {
+                    Ok(conn) = server.accept() => {
+                        let conn = Connection::from_transport_conn(TransportLayerConnection::RakNet(conn));
+                        
                         let session = Session::new(conn, Source::Client);
                         sessions.push(session);
+                    }
+                    Ok((msg, _)) = client.ping(tx_addr) => {
+                        ev_tx.send(NetworkEvent::Pong(msg)).unwrap();
                     }
                     _ = tick.tick() => {
                         for session in sessions.iter_mut() {
@@ -83,7 +106,7 @@ impl Network {
                 }
             }
             
-            listener.stop().await.unwrap();
+            server.stop();
         });
         
         Network {
