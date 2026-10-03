@@ -1,14 +1,21 @@
 use crate::network::source::Source;
-use crate::BedrockProtocol;
+use bedrock::protocol::PacketDyn;
 use std::net::SocketAddr;
 
+pub enum Captured {
+    Packet { frame: Vec<u8>, source: Source, addr: SocketAddr },
+    Event(NetworkEvent),
+}
+
 pub enum NetworkEvent {
-    Started,
-    Stopped,
+    Connected(SocketAddr),
+    Disconnected(SocketAddr, String),
     Packet {
-        packet: BedrockProtocol,
+        packet: Box<dyn PacketDyn>,
+        frame: Vec<u8>,
         source: Source,
         addr: SocketAddr,
     },
-    Pong(Box<[u8]>)
+    Pong(Box<[u8]>),
+    Error(String),
 }
