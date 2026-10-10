@@ -2,6 +2,7 @@ use crate::network::source::Source;
 use crate::ui::filter::{Filter, PacketInfo, Rule};
 use crate::ui::inspector::{InspectorTab, Inspection};
 use crate::ui::theme;
+use bedrock::network::motd::BedrockMOTD;
 use bedrock::protocol::PacketDyn;
 use chrono::{DateTime, Local};
 use egui::{Align, Label, Layout, Panel, RichText, ScrollArea, Sense, Ui};
@@ -72,13 +73,12 @@ impl Capture {
     }
 
     pub fn set_motd(&mut self, raw: &[u8]) {
-        let raw = String::from_utf8_lossy(raw);
-        let fields: Vec<&str> = raw.split(';').collect();
-        self.motd = match fields.as_slice() {
-            [_, name, protocol, version, players, max, ..] => {
-                format!("{name}  ·  {version} (protocol {protocol})  ·  {players}/{max} players")
-            }
-            _ => raw.into_owned(),
+        self.motd = match BedrockMOTD::parse(raw) {
+            Ok(motd) => format!(
+                "{}  ·  {} (protocol {})  ·  {}/{} players",
+                motd.name, motd.version, motd.protocol, motd.player_count, motd.player_max
+            ),
+            Err(_) => String::from_utf8_lossy(raw).into_owned(),
         };
     }
 

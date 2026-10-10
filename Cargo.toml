@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 raknet-tokio = { git = "https://github.com/bedrock-crustaceans/raknet" }
-bedrock = { git = "https://github.com/bedrock-crustaceans/bedrock-rs", features = ["full", "protocol-v2193", "protocol-packet-dyn", "protocol-packet-meta", "protocol-packet-trace", "auth-async"] }
+bedrock = { git = "https://github.com/bedrock-crustaceans/bedrock-rs", features = ["full", "protocol-v2193", "protocol-packet-dyn", "protocol-packet-meta", "protocol-packet-trace"] }
 egui = "0.36.2"
 egui-phosphor = { version = "0.14.0", features = ["fill"] }
 eframe = { version = "0.36.2", features = ["persistence"] }
@@ -13,8 +13,6 @@ tokio = "1.53.1"
 chrono = "0.4.45"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-base64 = "0.23.1"
 p384 = { version = "0.14.0", features = ["ecdh", "ecdsa"] }
 rand = "0.10.3"
-uuid = { version = "1.27.0", features = ["v3"] }
 egui_extras = "0.36.2"

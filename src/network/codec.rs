@@ -1,28 +1,15 @@
 use crate::{BedrockConnection, BedrockProtocol};
-use bedrock::network::codec::{compress_packets, decompress_packets, decrypt_packets, encrypt_packets};
+use bedrock::network::codec::{join_batch, split_batch};
 use bedrock::protocol::trace::{trace, FieldSpan};
-use bedrock::protocol::{PacketDyn, PacketHeader, Packets, ProtoCodec, ProtoCodecVAR, UnknownPacket};
-use std::io::{Cursor, Read};
+use bedrock::protocol::{PacketDyn, PacketHeader, Packets, ProtoCodec, UnknownPacket};
+use std::io::Cursor;
 
 pub type Frame = Vec<u8>;
 
 pub async fn read_frames(conn: &mut BedrockConnection) -> Result<Vec<Frame>, String> {
-    let mut stream = conn.recv_raw().await.map_err(|e| e.to_string())?;
-    stream = decrypt_packets(stream, conn.encryption.as_mut()).map_err(|e| e.to_string())?;
-    stream = decompress_packets(stream, conn.compression.as_ref()).map_err(|e| e.to_string())?;
-
-    let len = stream.len() as u64;
-    let mut cursor = Cursor::new(stream);
-    let mut frames = Vec::new();
-
-    while cursor.position() < len {
-        let size = <u32 as ProtoCodecVAR>::deserialize(&mut cursor).map_err(|e| e.to_string())?;
-        let mut frame = vec![0; size as usize];
-        cursor.read_exact(&mut frame).map_err(|e| e.to_string())?;
-        frames.push(frame);
-    }
-
-    Ok(frames)
+    let batch = conn.recv_batch().await.map_err(|e| e.to_string())?;
+    let frames = split_batch(&batch).map_err(|e| e.to_string())?;
+    Ok(frames.into_iter().map(<[u8]>::to_vec).collect())
 }
 
 pub async fn write_frames(conn: &mut BedrockConnection, frames: &[Frame]) -> Result<(), String> {
@@ -30,15 +17,7 @@ pub async fn write_frames(conn: &mut BedrockConnection, frames: &[Frame]) -> Res
         return Ok(());
     }
 
-    let mut stream = Vec::new();
-    for frame in frames {
-        <u32 as ProtoCodecVAR>::serialize(&(frame.len() as u32), &mut stream).map_err(|e| e.to_string())?;
-        stream.extend_from_slice(frame);
-    }
-
-    stream = compress_packets(stream, conn.compression.as_ref()).map_err(|e| e.to_string())?;
-    stream = encrypt_packets(stream, conn.encryption.as_mut()).map_err(|e| e.to_string())?;
-    conn.send_raw(&stream).await.map_err(|e| e.to_string())
+    conn.send_batch(join_batch(frames)).await.map_err(|e| e.to_string())
 }
 
 pub fn decode(frame: &[u8]) -> Option<BedrockProtocol> {

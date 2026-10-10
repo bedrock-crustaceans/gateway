@@ -2,14 +2,15 @@ use crate::network::codec::{decode, encode, packet_id, read_frames, write_frames
 use crate::network::event::{Captured, NetworkEvent};
 use crate::network::login::ProxyKeys;
 use crate::network::source::Source;
+use crate::network::Transport;
 use crate::{BedrockConnection, BedrockProtocol};
 use bedrock::network::compression::Compression;
-use bedrock::network::connection::Connection;
-use bedrock::network::transport::TransportLayerConnection;
-use bedrock::protocol::v662::enums::PacketCompressionAlgorithm;
+use bedrock::network::error::CompressionError;
+use bedrock::network::tokio::transport::{NetherNetConnection, TransportLayerConnection};
+use bedrock::network::tokio::Connection;
 use bedrock::protocol::v662::packets::{ClientToServerHandshakePacket, LoginPacket, NetworkSettingsPacket, ServerToClientHandshakePacket};
 use bedrock::protocol::{Packet, ProtoVersion};
-use raknet_tokio::prelude::{RakClient, RakSession};
+use raknet_tokio::prelude::RakClient;
 use std::net::SocketAddr;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -20,18 +21,8 @@ const INTERCEPTED: [u16; 4] = [
     NetworkSettingsPacket::<BedrockProtocol>::ID,
 ];
 
-const ZLIB_LEVEL: u8 = 6;
-
-pub fn negotiated_compression(settings: &NetworkSettingsPacket<BedrockProtocol>) -> Compression {
-    let threshold = settings.compression_threshold;
-    match settings.compression_algorithm {
-        PacketCompressionAlgorithm::ZLib => Compression::Zlib {
-            threshold,
-            compression_level: ZLIB_LEVEL,
-        },
-        PacketCompressionAlgorithm::Snappy => Compression::Snappy { threshold },
-        PacketCompressionAlgorithm::None => Compression::None,
-    }
+pub fn negotiated_compression(settings: &NetworkSettingsPacket<BedrockProtocol>) -> Result<Compression, CompressionError> {
+    Compression::from_network_settings(settings.compression_algorithm.clone() as u16, settings.compression_threshold)
 }
 
 fn intercept(frame: &[u8]) -> Option<BedrockProtocol> {
@@ -47,25 +38,33 @@ struct Proxy {
     capture: UnboundedSender<Captured>,
 }
 
-pub async fn run(session: RakSession, target: SocketAddr, capture: UnboundedSender<Captured>) {
-    let addr = session.get_addr();
+pub async fn run(transport: Transport, client: BedrockConnection, target: SocketAddr, capture: UnboundedSender<Captured>) {
+    let addr = client.get_socket_addr();
     _ = capture.send(Captured::Event(NetworkEvent::Connected(addr)));
 
-    let client = Connection::from_transport_conn(TransportLayerConnection::RakNet(session));
-
-    let mut rak_client = RakClient::new(|conf| conf.protocol = BedrockProtocol::RAKNET_VERSION);
-    let upstream = match rak_client.start().await {
-        Ok(()) => rak_client.connect(target).await.map_err(|err| format!("Failed to connect to {target}: {err:?}")),
-        Err(err) => Err(format!("Failed to start upstream client: {err:?}")),
+    let mut rak_client = None;
+    let upstream = match transport {
+        Transport::RakNet => {
+            let mut raknet = RakClient::new(|conf| conf.protocol = BedrockProtocol::RAKNET_VERSION);
+            let session = match raknet.start().await {
+                Ok(()) => raknet.connect(target).await.map(|session| TransportLayerConnection::RakNet(session.into())).map_err(|err| format!("Failed to connect to {target}: {err:?}")),
+                Err(err) => Err(format!("Failed to start upstream client: {err:?}")),
+            };
+            rak_client = Some(raknet);
+            session
+        }
+        Transport::NetherNet => NetherNetConnection::connect_http(target)
+            .await
+            .map(TransportLayerConnection::NetherNet)
+            .map_err(|err| format!("Failed to connect to {target}: {err}")),
     };
 
     let reason = match upstream {
         Ok(upstream) => {
-            let server = Connection::from_transport_conn(TransportLayerConnection::RakNet(upstream));
             let mut proxy = Proxy {
                 addr,
                 client,
-                server,
+                server: Connection::from_transport_conn(upstream),
                 keys: ProxyKeys::generate(),
                 capture: capture.clone(),
             };
@@ -80,7 +79,9 @@ pub async fn run(session: RakSession, target: SocketAddr, capture: UnboundedSend
         }
     };
 
-    rak_client.stop().await;
+    if let Some(mut raknet) = rak_client {
+        raknet.stop().await;
+    }
     _ = capture.send(Captured::Event(NetworkEvent::Disconnected(addr, reason)));
 }
 
@@ -152,7 +153,7 @@ impl Proxy {
                     write_frames(&mut self.server, &[encode(&reply)]).await?;
                 }
                 Some(BedrockProtocol::NetworkSettingsPacket(settings)) => {
-                    compression = Some(negotiated_compression(&settings));
+                    compression = Some(negotiated_compression(&settings).map_err(|err| err.to_string())?);
                     out.push(frame);
                 }
                 _ => out.push(frame),
@@ -173,6 +174,7 @@ impl Proxy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bedrock::protocol::v662::enums::PacketCompressionAlgorithm;
     use bedrock::protocol::v662::packets::RequestNetworkSettingsPacket;
 
     #[test]
@@ -203,12 +205,12 @@ mod tests {
     fn compression_follows_the_server_network_settings() {
         assert!(matches!(
             negotiated_compression(&settings(PacketCompressionAlgorithm::ZLib, 256)),
-            Compression::Zlib { threshold: 256, .. }
+            Ok(Compression::Zlib { threshold: 256, .. })
         ));
         assert!(matches!(
             negotiated_compression(&settings(PacketCompressionAlgorithm::Snappy, 1)),
-            Compression::Snappy { threshold: 1 }
+            Ok(Compression::Snappy { threshold: 1 })
         ));
-        assert!(matches!(negotiated_compression(&settings(PacketCompressionAlgorithm::None, 0)), Compression::None));
+        assert!(matches!(negotiated_compression(&settings(PacketCompressionAlgorithm::None, 0)), Ok(Compression::None)));
     }
 }

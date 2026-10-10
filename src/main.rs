@@ -2,9 +2,9 @@ pub mod network;
 pub mod ui;
 
 use crate::network::event::NetworkEvent;
-use crate::network::Network;
+use crate::network::{Network, Transport};
 use crate::ui::capture::Capture;
-use bedrock::network::connection::Connection;
+use bedrock::network::tokio::Connection;
 use bedrock::protocol::V2193;
 use eframe::{get_value, run_native, set_value, App, NativeOptions, Result, Storage};
 use egui::{CentralPanel, Ui};
@@ -42,6 +42,7 @@ pub struct GatewayApp {
 
 pub enum AppState {
     Setup {
+        transport: Transport,
         proxy_addr: String,
         proxy_addr_valid: bool,
         server_addr: String,
@@ -52,6 +53,7 @@ pub enum AppState {
     },
 }
 
+const TRANSPORT_KEY: &str = "transport";
 const PROXY_ADDR_KEY: &str = "proxy_addr";
 const SERVER_ADDR_KEY: &str = "server_addr";
 const FILTER_KEY: &str = "filter";
@@ -71,6 +73,7 @@ impl GatewayApp {
 
         Self {
             state: AppState::Setup {
+                transport: storage.and_then(|s| get_value(s, TRANSPORT_KEY)).unwrap_or_default(),
                 proxy_addr: get(PROXY_ADDR_KEY).unwrap_or_else(|| "0.0.0.0:19132".into()),
                 proxy_addr_valid: true,
                 server_addr: get(SERVER_ADDR_KEY).unwrap_or_else(|| "127.0.0.1:19133".into()),
@@ -83,10 +86,11 @@ impl GatewayApp {
 
 impl App for GatewayApp {
     fn save(&mut self, storage: &mut dyn Storage) {
-        let (proxy_addr, server_addr) = match &self.state {
-            AppState::Setup { proxy_addr, server_addr, .. } => (proxy_addr.clone(), server_addr.clone()),
-            AppState::Running { network } => (network.rx_addr.to_string(), network.tx_addr.to_string()),
+        let (transport, proxy_addr, server_addr) = match &self.state {
+            AppState::Setup { transport, proxy_addr, server_addr, .. } => (*transport, proxy_addr.clone(), server_addr.clone()),
+            AppState::Running { network } => (network.transport, network.rx_addr.to_string(), network.tx_addr.to_string()),
         };
+        set_value(storage, TRANSPORT_KEY, &transport);
         set_value(storage, PROXY_ADDR_KEY, &proxy_addr);
         set_value(storage, SERVER_ADDR_KEY, &server_addr);
         set_value(storage, FILTER_KEY, &self.capture.filter);

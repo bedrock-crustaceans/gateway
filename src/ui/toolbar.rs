@@ -1,4 +1,4 @@
-use crate::network::Network;
+use crate::network::{Network, Transport};
 use crate::ui::filter;
 use crate::ui::theme;
 use crate::{AppState, GatewayApp};
@@ -34,7 +34,12 @@ pub fn toolbar(ui: &mut Ui, app: &mut GatewayApp) {
             ui.add_space(8.);
 
             match &mut app.state {
-                AppState::Setup { proxy_addr, proxy_addr_valid, server_addr, server_addr_valid } => {
+                AppState::Setup { transport, proxy_addr, proxy_addr_valid, server_addr, server_addr_valid } => {
+                    egui::ComboBox::from_id_salt("transport").selected_text(transport.label()).show_ui(ui, |ui| {
+                        for option in Transport::ALL {
+                            ui.selectable_value(transport, option, option.label());
+                        }
+                    });
                     addr_field(ui, "Proxy", proxy_addr, *proxy_addr_valid, true);
                     addr_field(ui, "Target", server_addr, *server_addr_valid, true);
 
@@ -43,7 +48,7 @@ pub fn toolbar(ui: &mut Ui, app: &mut GatewayApp) {
                             (Ok(proxy), Ok(server)) => {
                                 app.capture.clear();
                                 app.capture.motd.clear();
-                                app.state = AppState::Running { network: Network::new(proxy, server) };
+                                app.state = AppState::Running { network: Network::new(*transport, proxy, server) };
                                 return;
                             }
                             (proxy, server) => {
@@ -55,12 +60,14 @@ pub fn toolbar(ui: &mut Ui, app: &mut GatewayApp) {
                 }
 
                 AppState::Running { network } => {
+                    ui.label(RichText::new(network.transport.label()).small().color(theme::TEXT_DIM));
                     addr_field(ui, "Proxy", &mut network.rx_addr.to_string(), true, false);
                     addr_field(ui, "Target", &mut network.tx_addr.to_string(), true, false);
 
                     if primary_button(ui, fill::STOP, "Stop", theme::DANGER).clicked() {
                         network.close();
                         app.state = AppState::Setup {
+                            transport: network.transport,
                             proxy_addr: network.rx_addr.to_string(),
                             proxy_addr_valid: true,
                             server_addr: network.tx_addr.to_string(),
